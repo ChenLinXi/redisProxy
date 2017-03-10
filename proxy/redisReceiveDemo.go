@@ -91,27 +91,6 @@ func parseLen(p []byte) (int, error) {
 	return n, nil
 }
 
-func (tcpServer *tcpServer) Listen() {
-	listener, err := net.Listen("tcp", tcpServer.address)
-	if err != nil{
-		log.Fatal("Error starting TCP server")
-	}
-	defer listener.Close()
-	hello := []byte("*1\r\n$2OK\r\n")
-	for {
-		conn, _ := listener.Accept()
-		redisClient := &redisClient{
-			conn:conn,
-			tcpServer:tcpServer,
-			reader:bufio.NewReader(conn),
-		}
-		redisClient.SendBytes(hello)
-		// receive message from client reader and parse to interface{}
-		reply, _ := redisClient.Receive()
-		fmt.Print(reply)
-	}
-}
-
 func (redisClient *redisClient) readLine() ([]byte, error){
 	message, err := redisClient.reader.ReadSlice('\n')
 	if err != nil{
@@ -187,6 +166,32 @@ func New(address string) *tcpServer {
 		address:address,
 	}
 	return tcpServer
+}
+
+/*
+	测试结果：
+	从redis-cli客户端中接收命令并解析成功
+ */
+func (tcpServer *tcpServer) Listen() {
+	listener, err := net.Listen("tcp", tcpServer.address)
+	if err != nil{
+		log.Fatal("Error starting TCP server")
+	}
+	defer listener.Close()
+	hello := []byte("*1\r\n$2OK\r\n")
+	for {
+		conn, _ := listener.Accept()
+		redisClient := &redisClient{
+			conn:conn,
+			tcpServer:tcpServer,
+			reader:bufio.NewReader(conn),
+		}
+		// send Message to redisClient as response
+		redisClient.SendBytes(hello)
+		// receive message from client reader and parse to interface{}
+		reply, _ := redisClient.Receive()
+		fmt.Print(reply)
+	}
 }
 
 const address  = "xxxx"
