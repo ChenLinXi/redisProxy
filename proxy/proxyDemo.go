@@ -285,21 +285,26 @@ func (tcpServer *tcpServer) Listen() {
 			reader:bufio.NewReader(conn),
 			writer:bufio.NewWriter(conn),
 		}
-		c, _ := redis.Dial("tcp","host:port",redis.DialPassword("xxxx"))
-		reply, _ := redisClient.Receive() // receive message from client reader and parse to interface{}
-		message := ToSlice(reply)
-		command, _ := convertInterfaceToString(message[0])
-		actual, _ := c.Do(command, message[1:]...)
-		result, err := convertInterfaceToBytes(actual)
-		if err != nil{
-			log.Fatal(err)
-		}
-		res, _ := parseMessage(result)
-		redisClient.SendBytes(res)
+		c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("xxxx"))
+		go func() {
+			for {
+				reply, _ := redisClient.Receive() // receive message from client reader and parse to interface{}
+				message := ToSlice(reply)
+				command, _ := convertInterfaceToString(message[0])
+				actual, _ := c.Do(command, message[1:]...)
+				result, err := convertInterfaceToBytes(actual)
+				if err != nil{
+					log.Fatal(err)
+				}
+				res, _ := parseMessage(result)
+				fmt.Print(string(result))
+				redisClient.SendBytes(res)
+			}
+		} ()
 	}
 }
 
-const address  = "host:port"
+const address  = "xxxx"
 func main(){
 	tcpServer := New(address)
 	defer tcpServer.Listen()
