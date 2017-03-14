@@ -24,6 +24,7 @@ type redisClient struct {
 	tcpServer	*tcpServer
 	reader		*bufio.Reader
 	writer		*bufio.Writer
+	bufferSize	int
 }
 
 type tcpServer struct {
@@ -48,10 +49,25 @@ func (redisClient *redisClient) Close() error{
 
 /*
 	发送字节数据到redis-cli中
+	发送单位：[1024]byte
  */
-func (redisClient *redisClient) SendBytes(b []byte) error{
-	_, err := redisClient.conn.Write(b)
-	return err
+func (redisClient *redisClient) SendBytes(b []byte) ([]byte) {
+	length := len(b)
+	fmt.Print(length)
+	//分包发送 bufferSize = 1024
+	if length <= redisClient.bufferSize {
+		_, err := redisClient.conn.Write(b)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return nil
+	} else {
+		_, err := redisClient.conn.Write(b[0:redisClient.bufferSize])
+		if err != nil {
+			log.Fatal(err)
+		}
+		return redisClient.SendBytes(b[redisClient.bufferSize:])
+	}
 }
 
 /*
@@ -205,7 +221,7 @@ func New(address string) *tcpServer {
 	将interface{}切割为[]interface{}数组
 	如：interface{"get a"}切割为 interface{"get", "a"}
  */
-func ToSlice(arr interface{}) []interface{} {
+func convertInterfaceToSlice(arr interface{}) []interface{} {
 	v := reflect.ValueOf(arr)
 	if v.Kind() != reflect.Slice{
 		panic("toslice arr not slice")
@@ -247,20 +263,84 @@ func convertInterfaceToBytes(key interface{}) ([]byte, error) {
 }
 
 /*
-	处理发送给redis-cli的返回信息
+	处理发送给redis-cli的返回信息(长度小于1024)
 	如：ok -> *1\r\n$2\r\nOK\r\n
  */
+//func parseMessage(message []byte) ([]byte, error) {
+//	result := [][]byte{
+//		[]byte("*1"),
+//		[]byte("$" + strconv.Itoa(len(message))),
+//		message,
+//		[]byte(""),
+//	}
+//	charset := []byte("\r\n")
+//	res := bytes.Join(result, charset)
+//	return res, nil
+//}
+
+/*
+	处理发送给redis-cli的返回信息(长度大于1024，需要分包处理)
+ */
 func parseMessage(message []byte) ([]byte, error) {
-	result := [][]byte{
-		[]byte("*1"),
-		[]byte("$" + strconv.Itoa(len(message))),
-		message,
-		[]byte(""),
-	}
+	length := len(message)
 	charset := []byte("\r\n")
-	res := bytes.Join(result, charset)
-	return res, nil
+	if length > 1024 {
+		// 处理长度大于1024字节的数据
+		packageNum := (length / 1024) + 1	// 消息包长度
+		result := make([][]byte, (packageNum+1)*2)	// 消息总量
+		result[0] = []byte("*"+strconv.Itoa(packageNum)) //消息头
+		tmp := packageNum	// 数组下标计数器
+		counter := 1	// 消息长度计数器
+		for i := 0; i < length; i += 1024{
+			if counter == packageNum {
+				result[packageNum-tmp+1] = []byte("$"+strconv.Itoa(length - 1024*(packageNum-1)))	// 单个包的字节长度
+				result[packageNum-tmp+2] = message[i:i+length-1024*(packageNum-1)]	// 单个包的内容（末尾小于等于1024字节）
+			} else {
+				result[packageNum-tmp+1] = []byte("$"+strconv.Itoa(1024))	// 单个包的字节长度
+				result[packageNum-tmp+2] = message[i:i+1024]	// 单个包的内容（1024字节）
+			}
+			tmp -= 2
+			counter += 1
+		}
+		result[packageNum*2 + 1] = []byte("")	// 消息尾
+		fmt.Print(string(bytes.Join(result, charset)))
+		return bytes.Join(result, charset), nil	// 消息内容之间加上 /r/n 格式化成[]byte类型数据
+	}else {
+		// 直接发送单个包
+		result := [][]byte{
+			[]byte("*1"),
+			[]byte("$" + strconv.Itoa(len(message))),
+			message,
+			[]byte(""),
+		}
+		res := bytes.Join(result, charset)
+		return res, nil
+	}
 }
+
+/*
+	排查redis-cli发送的命令
+ */
+//func parseCommand(command string) error{
+//	switch command {
+//	case "keys" || "KEYS":
+//		return nil
+//	case "migrate" || "MIGIRATE":
+//		return nil
+//	case "move" || "MOVE":
+//		return nil
+//	case "object" || "OBJECT":
+//		return nil
+//	case "dump" || "DUMP":
+//		return nil
+//	case "blpop" || "BLPOP":
+//		return nil
+//	case "brpop" || "BRPOP":
+//		return nil
+//	default:
+//		return command
+//	}
+//}
 
 
 /*
@@ -276,7 +356,8 @@ func (tcpServer *tcpServer) Listen() {
 		log.Fatal("Error starting TCP server")
 	}
 	defer listener.Close()
-	//hello := []byte("*1\r\n$2\r\nOK\r\n")
+
+	// for循环监听多组redis-cli客户端
 	for {
 		conn, _ := listener.Accept()
 		redisClient := &redisClient{
@@ -284,21 +365,31 @@ func (tcpServer *tcpServer) Listen() {
 			tcpServer:tcpServer,
 			reader:bufio.NewReader(conn),
 			writer:bufio.NewWriter(conn),
+			bufferSize:1024,
 		}
-		c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("xxxx"))
+		c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("d1Iuw3qlDBntyx1w"))
+
+		//go routine异步处理多个redis-cli客户端
 		go func() {
+
+			// for循环接收多组redis-cli发来的消息
 			for {
 				reply, _ := redisClient.Receive() // receive message from client reader and parse to interface{}
-				message := ToSlice(reply)
+				message := convertInterfaceToSlice(reply)
 				command, _ := convertInterfaceToString(message[0])
 				actual, _ := c.Do(command, message[1:]...)
-				result, err := convertInterfaceToBytes(actual)
-				if err != nil{
-					log.Fatal(err)
+				if actual != nil{	// 判断执行返回结果是否为空
+					result, err := convertInterfaceToBytes(actual)
+					if err != nil{
+						log.Fatal(err)
+					}
+					res, _ := parseMessage(result)	//处理数据
+					redisClient.SendBytes(res)	//将处理好的数据递归发送给redis客户端
+				} else{
+					result := []byte("")
+					res, _ := parseMessage(result)
+					redisClient.SendBytes(res)
 				}
-				res, _ := parseMessage(result)
-				fmt.Print(string(result))
-				redisClient.SendBytes(res)
 			}
 		} ()
 	}
