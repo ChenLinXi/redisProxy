@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"strconv"
+	"strings"
 )
 
 type protocolError string
@@ -53,7 +54,7 @@ func (redisClient *redisClient) Close() error{
  */
 func (redisClient *redisClient) SendBytes(b []byte) ([]byte) {
 	length := len(b)
-	fmt.Print(length)
+	//fmt.Print(length)
 	//分包发送 bufferSize = 1024
 	if length <= redisClient.bufferSize {
 		_, err := redisClient.conn.Write(b)
@@ -319,28 +320,114 @@ func parseMessage(message []byte) ([]byte, error) {
 }
 
 /*
-	排查redis-cli发送的命令
- */
-//func parseCommand(command string) error{
-//	switch command {
-//	case "keys" || "KEYS":
-//		return nil
-//	case "migrate" || "MIGIRATE":
-//		return nil
-//	case "move" || "MOVE":
-//		return nil
-//	case "object" || "OBJECT":
-//		return nil
-//	case "dump" || "DUMP":
-//		return nil
-//	case "blpop" || "BLPOP":
-//		return nil
-//	case "brpop" || "BRPOP":
-//		return nil
-//	default:
-//		return command
-//	}
-//}
+	redis命令过滤
+*/
+func commandFilter(command string) string{
+	switch strings.ToUpper(command) {
+	case "KEYS":		// keys
+		return ""
+	case "MIGIRATE":
+		return ""
+	case "MOVE":
+		return ""
+	case "OBJECT":
+		return ""
+	case "DUMP":
+		return ""
+	case "BLPOP":		// lists
+		return ""
+	case "BRPOP":
+		return ""
+	case "BRPOPLPUSH":
+		return ""
+	case "RPOPLPUSH":
+		return ""
+	case "PSUBSCRIBE":	// pub/sub
+		return ""
+	case "PUBLISH":
+		return ""
+	case "PUBSUBSCRIBE":
+		return ""
+	case "SUBSCRIBE":
+		return ""
+	case "UNSUBSCRIBE":
+		return ""
+	case "DISCARD":		// transctions
+		return ""
+	case "EXEC":
+		return ""
+	case "MULTI":
+		return ""
+	case "UNWATCH":
+		return ""
+	case "WATCH":
+		return ""
+	case "SCRIPT":		// scripting
+		return ""
+	case "EVAL":
+		return ""
+	case "EVALSHA":
+		return ""
+	case "BGREWRITEAOF":		// server
+		return ""
+	case "BGSAVE":
+		return ""
+	case "CLIENT":
+		return ""
+	case "CONFIG":
+		return ""
+	case "DBSIZE":
+		return ""
+	case "DEBUG":
+		return ""
+	case "FLUSHALL":
+		return ""
+	case "FLUSHDB":
+		return ""
+	case "LASTSAVE":
+		return ""
+	case "LATENCY":
+		return ""
+	case "MONITOR":
+		return ""
+	case "PSYNC":
+		return ""
+	case "REPLCONF":
+		return ""
+	case "RESTORE":
+		return ""
+	case "SAVE":
+		return ""
+	case "SHUTDOWN":
+		return ""
+	case "SLAVEOF":
+		return ""
+	case "SYNC":
+		return ""
+	case "TIME":
+		return ""
+	case "SLOTSCHECK":		// SLOT
+		return ""
+	case "SLOTSDEL":
+		return ""
+	case "SLOTSINFO":
+		return ""
+	case "SLOTSMGRTONE":
+		return ""
+	case "SLOTSMGRTSLOT":
+		return ""
+	case "SLOTSMGRTTAGONE":
+		return ""
+	case "SLOTSMGRTTAGSLOT":
+		return ""
+	case "READONLY":		// cluster
+		return ""
+	case "READWRITE":
+		return ""
+	default:
+		return command
+	}
+}
 
 
 /*
@@ -377,16 +464,22 @@ func (tcpServer *tcpServer) Listen() {
 				reply, _ := redisClient.Receive() // receive message from client reader and parse to interface{}
 				message := convertInterfaceToSlice(reply)
 				command, _ := convertInterfaceToString(message[0])
-				actual, _ := c.Do(command, message[1:]...)
-				if actual != nil{	// 判断执行返回结果是否为空
-					result, err := convertInterfaceToBytes(actual)
-					if err != nil{
-						log.Fatal(err)
+				if commandFilter(command) != ""{	// 过滤命令
+					actual, _ := c.Do(command, message[1:]...)
+					if actual != nil{	// 判断执行返回结果是否为空
+						result, err := convertInterfaceToBytes(actual)
+						if err != nil{
+							log.Fatal(err)
+						}
+						res, _ := parseMessage(result)	//处理数据
+						redisClient.SendBytes(res)	//将处理好的数据递归发送给redis客户端
+					} else{
+						result := []byte("")
+						res, _ := parseMessage(result)
+						redisClient.SendBytes(res)
 					}
-					res, _ := parseMessage(result)	//处理数据
-					redisClient.SendBytes(res)	//将处理好的数据递归发送给redis客户端
-				} else{
-					result := []byte("")
+				}else {	// 不支持命令
+					result := []byte("Command not support!")
 					res, _ := parseMessage(result)
 					redisClient.SendBytes(res)
 				}
