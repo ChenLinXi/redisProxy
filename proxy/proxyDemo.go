@@ -54,8 +54,7 @@ func (redisClient *redisClient) Close() error{
  */
 func (redisClient *redisClient) SendBytes(b []byte) ([]byte) {
 	length := len(b)
-	//fmt.Print(length)
-	//分包发送 bufferSize = 1024
+
 	if length <= redisClient.bufferSize {
 		_, err := redisClient.conn.Write(b)
 		if err != nil {
@@ -69,6 +68,13 @@ func (redisClient *redisClient) SendBytes(b []byte) ([]byte) {
 		}
 		return redisClient.SendBytes(b[redisClient.bufferSize:])
 	}
+}
+
+/*
+	pipeline发送 chan([]byte)
+ */
+func (redisClient *redisClient) SendPipeline() {
+
 }
 
 /*
@@ -304,7 +310,7 @@ func parseMessage(message []byte) ([]byte, error) {
 			counter += 1
 		}
 		result[packageNum*2 + 1] = []byte("")	// 消息尾
-		fmt.Print(string(bytes.Join(result, charset)))
+		//fmt.Print(string(bytes.Join(result, charset)))
 		return bytes.Join(result, charset), nil	// 消息内容之间加上 /r/n 格式化成[]byte类型数据
 	}else {
 		// 直接发送单个包
@@ -436,6 +442,7 @@ func commandFilter(command string) string{
 	2.解析后发送到redis单机中，并获取interface{}类型数据
 	3.加工返回的interface{}中的[]byte数据result
 	4.将加工后的数据返回到redis-cli中
+	5.过滤非集群不支持命令
  */
 func (tcpServer *tcpServer) Listen() {
 	listener, err := net.Listen("tcp", tcpServer.address)
@@ -462,26 +469,28 @@ func (tcpServer *tcpServer) Listen() {
 			// for循环接收多组redis-cli发来的消息
 			for {
 				reply, _ := redisClient.Receive() // receive message from client reader and parse to interface{}
-				message := convertInterfaceToSlice(reply)
-				command, _ := convertInterfaceToString(message[0])
-				if commandFilter(command) != ""{	// 过滤命令
-					actual, _ := c.Do(command, message[1:]...)
-					if actual != nil{	// 判断执行返回结果是否为空
-						result, err := convertInterfaceToBytes(actual)
-						if err != nil{
-							log.Fatal(err)
+				if reply != nil{	// 处理连接断开后服务中断的bug
+					message := convertInterfaceToSlice(reply)
+					command, _ := convertInterfaceToString(message[0])
+					if commandFilter(command) != ""{	// 过滤命令
+						actual, _ := c.Do(command, message[1:]...)
+						if actual != nil{	// 判断执行返回结果是否为空
+							result, err := convertInterfaceToBytes(actual)
+							if err != nil{
+								log.Fatal(err)
+							}
+							res, _ := parseMessage(result)	//处理数据
+							redisClient.SendBytes(res)	//将处理好的数据递归发送给redis客户端
+						} else{
+							result := []byte("")
+							res, _ := parseMessage(result)
+							redisClient.SendBytes(res)
 						}
-						res, _ := parseMessage(result)	//处理数据
-						redisClient.SendBytes(res)	//将处理好的数据递归发送给redis客户端
-					} else{
-						result := []byte("")
+					}else {	// 不支持命令
+						result := []byte("Command not support!")
 						res, _ := parseMessage(result)
 						redisClient.SendBytes(res)
 					}
-				}else {	// 不支持命令
-					result := []byte("Command not support!")
-					res, _ := parseMessage(result)
-					redisClient.SendBytes(res)
 				}
 			}
 		} ()
