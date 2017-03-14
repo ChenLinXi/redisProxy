@@ -475,7 +475,7 @@ func (tcpServer *tcpServer) Listen() {
 					if commandFilter(command) != ""{	// 过滤命令
 						actual, _ := c.Do(command, message[1:]...)
 						if actual != nil{	// 判断执行返回结果是否为空
-							result, err := convertInterfaceToBytes(actual)
+							result, err := redis.Bytes(actual, nil)
 							if err != nil{
 								log.Fatal(err)
 							}
