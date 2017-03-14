@@ -9,9 +9,10 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"bytes"
-	"encoding/gob"
 	"strconv"
 	"strings"
+	"runtime"
+	"encoding/gob"
 )
 
 type protocolError string
@@ -257,23 +258,24 @@ func convertInterfaceToString(key interface{}) (string, error) {
 
 /*
 	从interface中提取返回信息
+	PS：此方法有问题，强转会导致数据格式有误
 	如：OK等
  */
-func convertInterfaceToBytes(key interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(key)
-	if err != nil{
-		return nil, err
-	}
-	return buf.Bytes()[4:], nil
-}
+//func convertInterfaceToBytes(key interface{}) ([]byte, error) {
+//	var buf bytes.Buffer
+//	enc := gob.NewEncoder(&buf)
+//	err := enc.Encode(key)
+//	if err != nil{
+//		return nil, err
+//	}
+//	return buf.Bytes()[4:], nil
+//}
 
 /*
 	处理发送给redis-cli的返回信息(长度小于1024)
 	如：ok -> *1\r\n$2\r\nOK\r\n
  */
-//func parseMessage(message []byte) ([]byte, error) {
+//func parseShortMessage(message []byte) ([]byte, error) {
 //	result := [][]byte{
 //		[]byte("*1"),
 //		[]byte("$" + strconv.Itoa(len(message))),
@@ -309,8 +311,7 @@ func parseMessage(message []byte) ([]byte, error) {
 			tmp -= 2
 			counter += 1
 		}
-		result[packageNum*2 + 1] = []byte("")	// 消息尾
-		//fmt.Print(string(bytes.Join(result, charset)))
+		result[packageNum*2 + 1] = []byte{}	// 消息尾
 		return bytes.Join(result, charset), nil	// 消息内容之间加上 /r/n 格式化成[]byte类型数据
 	}else {
 		// 直接发送单个包
@@ -326,113 +327,69 @@ func parseMessage(message []byte) ([]byte, error) {
 }
 
 /*
-	redis命令过滤
-*/
-func commandFilter(command string) string{
-	switch strings.ToUpper(command) {
-	case "KEYS":		// keys
-		return ""
-	case "MIGIRATE":
-		return ""
-	case "MOVE":
-		return ""
-	case "OBJECT":
-		return ""
-	case "DUMP":
-		return ""
-	case "BLPOP":		// lists
-		return ""
-	case "BRPOP":
-		return ""
-	case "BRPOPLPUSH":
-		return ""
-	case "RPOPLPUSH":
-		return ""
-	case "PSUBSCRIBE":	// pub/sub
-		return ""
-	case "PUBLISH":
-		return ""
-	case "PUBSUBSCRIBE":
-		return ""
-	case "SUBSCRIBE":
-		return ""
-	case "UNSUBSCRIBE":
-		return ""
-	case "DISCARD":		// transctions
-		return ""
-	case "EXEC":
-		return ""
-	case "MULTI":
-		return ""
-	case "UNWATCH":
-		return ""
-	case "WATCH":
-		return ""
-	case "SCRIPT":		// scripting
-		return ""
-	case "EVAL":
-		return ""
-	case "EVALSHA":
-		return ""
-	case "BGREWRITEAOF":		// server
-		return ""
-	case "BGSAVE":
-		return ""
-	case "CLIENT":
-		return ""
-	case "CONFIG":
-		return ""
-	case "DBSIZE":
-		return ""
-	case "DEBUG":
-		return ""
-	case "FLUSHALL":
-		return ""
-	case "FLUSHDB":
-		return ""
-	case "LASTSAVE":
-		return ""
-	case "LATENCY":
-		return ""
-	case "MONITOR":
-		return ""
-	case "PSYNC":
-		return ""
-	case "REPLCONF":
-		return ""
-	case "RESTORE":
-		return ""
-	case "SAVE":
-		return ""
-	case "SHUTDOWN":
-		return ""
-	case "SLAVEOF":
-		return ""
-	case "SYNC":
-		return ""
-	case "TIME":
-		return ""
-	case "SLOTSCHECK":		// SLOT
-		return ""
-	case "SLOTSDEL":
-		return ""
-	case "SLOTSINFO":
-		return ""
-	case "SLOTSMGRTONE":
-		return ""
-	case "SLOTSMGRTSLOT":
-		return ""
-	case "SLOTSMGRTTAGONE":
-		return ""
-	case "SLOTSMGRTTAGSLOT":
-		return ""
-	case "READONLY":		// cluster
-		return ""
-	case "READWRITE":
-		return ""
-	default:
-		return command
-	}
+	过滤命令部分
+ */
+func (tcpServer *tcpServer) filter() map[string]bool{
+	filter := make(map[string]bool)
+	// keys
+	filter["KEYS"] = false
+	filter["MIGIRATE"] = false
+	filter["MOVE"] = false
+	filter["OBJECT"] = false
+	filter["DUMP"] = false
+	// lists部分
+	filter["BLPOP"] = false
+	filter["BRPOP"] = false
+	filter["BRPOPLPUSH"] = false
+	filter["RPOPLPUSH"] = false
+	// pub+sub
+	filter["PSUBSCRIBE"] = false
+	filter["PUBLISH"] = false
+	filter["PUBSUBSCRIBE"] = false
+	filter["SUBSCRIBE"] = false
+	filter["UNSUBSCRIBE"] = false
+	// transactions
+	filter["DISCARD"] = false
+	filter["EXEC"] = false
+	filter["MULTI"] = false
+	filter["UNWATCH"] = false
+	filter["WATCH"] = false
+	// scripting
+	filter["SCRIPT"] = false
+	filter["EVAL"] = false
+	filter["EVALSHA"] = false
+	// server
+	filter["BGREWRITEAOF"] = false
+	filter["BGSAVE"] = false
+	filter["CLIENT"] = false
+	filter["CONFIG"] = false
+	filter["DBSIZE"] = false
+	filter["DEBUG"] = false
+	filter["FLUSHALL"] = false
+	filter["FLUSHDB"] = false
+	filter["LASTSAVE"] = false
+	filter["LATENCY"] = false
+	filter["MONITOR"] = false
+	filter["PSYNC"] = false
+	filter["REPLCONF"] = false
+	filter["RESTORE"] = false
+	filter["SAVE"] = false
+	filter["SHUTDOWN"] = false
+	filter["SLAVEOF"] = false
+	filter["SYNC"] = false
+	filter["TIME"] = false
+	// slot
+	filter["SLOTSCHECK"] = false
+	filter["SLOTSDEL"] = false
+	filter["SLOTSINFO"] = false
+	filter["SLOTSMGRTONE"] = false
+	filter["SLOTSMGRTSLOT"] = false
+	filter["SLOTSMGRTTAGONE"] = false
+	filter["SLOTSMGRTTAGSLOT"] = false
+	// cluster
+	filter["READONLY"] = false
+	filter["READWRITE"] = false
+	return filter
 }
 
 
@@ -443,8 +400,11 @@ func commandFilter(command string) string{
 	3.加工返回的interface{}中的[]byte数据result
 	4.将加工后的数据返回到redis-cli中
 	5.过滤非集群不支持命令
+	6.解决了强转导致的数据乱码问题 convertInterfaceToBytes
+	7.修改过滤器
  */
 func (tcpServer *tcpServer) Listen() {
+	filter := tcpServer.filter()	//过滤命令
 	listener, err := net.Listen("tcp", tcpServer.address)
 	if err != nil{
 		log.Fatal("Error starting TCP server")
@@ -461,7 +421,7 @@ func (tcpServer *tcpServer) Listen() {
 			writer:bufio.NewWriter(conn),
 			bufferSize:1024,
 		}
-		c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("d1Iuw3qlDBntyx1w"))
+		c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("xxxx"))
 
 		//go routine异步处理多个redis-cli客户端
 		go func() {
@@ -472,11 +432,12 @@ func (tcpServer *tcpServer) Listen() {
 				if reply != nil{	// 处理连接断开后服务中断的bug
 					message := convertInterfaceToSlice(reply)
 					command, _ := convertInterfaceToString(message[0])
-					if commandFilter(command) != ""{	// 过滤命令
+					_, ok := filter[strings.ToUpper(command)]// 过滤命令
+					if !ok{
 						actual, _ := c.Do(command, message[1:]...)
 						if actual != nil{	// 判断执行返回结果是否为空
-							result, err := redis.Bytes(actual, nil)
-							if err != nil{
+							result, err := redis.Bytes(actual, nil)	// 将interface{}转成bytes类型
+		  					if err != nil{
 								log.Fatal(err)
 							}
 							res, _ := parseMessage(result)	//处理数据
@@ -487,7 +448,7 @@ func (tcpServer *tcpServer) Listen() {
 							redisClient.SendBytes(res)
 						}
 					}else {	// 不支持命令
-						result := []byte("Command not support!")
+						result := []byte("ERR command not support")
 						res, _ := parseMessage(result)
 						redisClient.SendBytes(res)
 					}
@@ -499,6 +460,8 @@ func (tcpServer *tcpServer) Listen() {
 
 const address  = "xxxx"
 func main(){
+	nCpu := runtime.NumCPU()
+	runtime.GOMAXPROCS(nCpu)
 	tcpServer := New(address)
 	defer tcpServer.Listen()
 }
