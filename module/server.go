@@ -38,7 +38,7 @@ func (server *Server) Listen() {
 			bufferSize:1024,
 		}
 		go func() {
-			c, _ := redis.Dial("tcp","10.100.150.31:6011",redis.DialPassword("d1Iuw3qlDBntyx1w"))
+			c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("xxxx"))
 			for {
 				reply, _ := client.Receive()
 				if reply != nil{
