@@ -109,10 +109,8 @@ func (utils *utils) convertInterfaceToString(key interface{}) (string, error){
 	加工发送的数据
  */
 func (utils *utils) parseMessage(message []byte) ([]byte, error){
-	length := len(message)
-	fmt.Print(length)
 	charset := []byte("\r\n")
-	// 直接发送单个包
+	// 组装消息
 	result := [][]byte{
 		[]byte("*1"),
 		[]byte("$" + strconv.Itoa(len(message))),
