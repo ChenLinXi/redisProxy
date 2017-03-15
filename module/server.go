@@ -48,11 +48,13 @@ func (server *Server) handleConnection(conn net.Conn){
 					res, _ := utils.parseMessage(result)
 					client.SendBytes(res)
 				}else {
+					// 执行Do之后出现异常， 返回空消息
 					result :=  []byte("")
 					res, _ :=  utils.parseMessage(result)
 					client.SendBytes(res)
 				}
 			}else {
+				// 过滤redisProxy不支持的命令
 				result := []byte("ERR command not support")
 				res, _ := utils.parseMessage(result)
 				client.SendBytes(res)
@@ -76,6 +78,6 @@ func (server *Server) Listen() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		go server.handleConnection(conn)
+		go server.handleConnection(conn)	// 调用处理方法
 	}
 }
