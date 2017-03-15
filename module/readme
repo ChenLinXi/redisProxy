@@ -1,0 +1,19 @@
+****结构详解****
+
+buffer:
+    通过channel来存储读取和发送的数据
+client:
+    redis-cli的映射实体的实现
+config:
+    client和server的配置
+error:
+    处理异常错误信息
+filter:
+    过滤不支持的命令;
+    过滤server执行后返回的错误信息
+redisInfo:
+    代理配置的redis信息
+server:
+    tcp服务器
+utils:
+    工具:用来进行数据处理
