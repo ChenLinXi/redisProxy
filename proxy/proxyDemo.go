@@ -421,10 +421,10 @@ func (tcpServer *tcpServer) Listen() {
 			writer:bufio.NewWriter(conn),
 			bufferSize:1024,
 		}
-		c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("xxxx"))
 
 		//go routine异步处理多个redis-cli客户端
 		go func() {
+			c, _ := redis.Dial("tcp","xxxx",redis.DialPassword("xxxx"))
 
 			// for循环接收多组redis-cli发来的消息
 			for {
@@ -434,15 +434,15 @@ func (tcpServer *tcpServer) Listen() {
 					command, _ := convertInterfaceToString(message[0])
 					_, ok := filter[strings.ToUpper(command)]// 过滤命令
 					if !ok{
-						actual, _ := c.Do(command, message[1:]...)
-						if actual != nil{	// 判断执行返回结果是否为空
+						actual, err := c.Do(command, message[1:]...)
+						if actual != nil && err == nil{	// 判断执行返回结果是否为空
 							result, err := redis.Bytes(actual, nil)	// 将interface{}转成bytes类型
-		  					if err != nil{
+							if err != nil{
 								log.Fatal(err)
 							}
 							res, _ := parseMessage(result)	//处理数据
 							redisClient.SendBytes(res)	//将处理好的数据递归发送给redis客户端
-						} else{
+						}else {
 							result := []byte("")
 							res, _ := parseMessage(result)
 							redisClient.SendBytes(res)
