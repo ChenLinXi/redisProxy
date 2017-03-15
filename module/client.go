@@ -42,21 +42,11 @@ func (client *Client) Close() error{
 	send bytes to redis-cli
  */
 func (client *Client) SendBytes(b []byte) ([]byte) {
-	length := len(b)
-
-	if length <= client.bufferSize {
-		_, err := client.conn.Write(b)
-		if err != nil{
-			log.Fatal(err)
-		}
-		return nil
-	} else {
-		_, err := client.conn.Write(b[0:client.bufferSize])
-		if err != nil{
-			log.Fatal(err)
-		}
-		return client.SendBytes(b[client.bufferSize:])
+	_, err := client.conn.Write(b)
+	if err != nil{
+		log.Fatal(err)
 	}
+	return nil
 }
 
 /*
