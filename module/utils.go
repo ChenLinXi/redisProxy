@@ -106,40 +106,19 @@ func (utils *utils) convertInterfaceToString(key interface{}) (string, error){
 }
 
 /*
-	分包
+	加工发送的数据
  */
 func (utils *utils) parseMessage(message []byte) ([]byte, error){
 	length := len(message)
+	fmt.Print(length)
 	charset := []byte("\r\n")
-	if length > 1024 {
-		// 处理长度大于1024字节的数据
-		packageNum := (length / 1024) + 1	// 消息包长度
-		result := make([][]byte, (packageNum+1)*2)	// 消息总量
-		result[0] = []byte("*"+strconv.Itoa(packageNum)) //消息头
-		tmp := packageNum	// 数组下标计数器
-		counter := 1	// 消息长度计数器
-		for i := 0; i < length; i += 1024{
-			if counter == packageNum {
-				result[packageNum-tmp+1] = []byte("$"+strconv.Itoa(length - 1024*(packageNum-1)))	// 单个包的字节长度
-				result[packageNum-tmp+2] = message[i:i+length-1024*(packageNum-1)]	// 单个包的内容（末尾小于等于1024字节）
-			} else {
-				result[packageNum-tmp+1] = []byte("$"+strconv.Itoa(1024))	// 单个包的字节长度
-				result[packageNum-tmp+2] = message[i:i+1024]	// 单个包的内容（1024字节）
-			}
-			tmp -= 2
-			counter += 1
-		}
-		result[packageNum*2 + 1] = []byte{}	// 消息尾
-		return bytes.Join(result, charset), nil	// 消息内容之间加上 /r/n 格式化成[]byte类型数据
-	}else {
-		// 直接发送单个包
-		result := [][]byte{
-			[]byte("*1"),
-			[]byte("$" + strconv.Itoa(len(message))),
-			message,
-			[]byte(""),
-		}
-		res := bytes.Join(result, charset)
-		return res, nil
+	// 直接发送单个包
+	result := [][]byte{
+		[]byte("*1"),
+		[]byte("$" + strconv.Itoa(len(message))),
+		message,
+		[]byte(""),
 	}
+	res := bytes.Join(result, charset)
+	return res, nil
 }
