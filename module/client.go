@@ -65,6 +65,32 @@ func (client *Client) readLine() ([]byte, error) {
 }
 
 /*
+	get message size
+ */
+func (client *Client) peek() (int, error) {
+	client.reader.Peek(1)
+	length := client.reader.Buffered()
+	return length, nil
+}
+
+/*
+	read all message
+ */
+func (client *Client) readAll() ([]byte, error){
+	msgLen, err := client.peek()
+	if err != nil {
+		log.Fatal(err)
+	}
+	b := make([]byte, msgLen)
+	n, err := client.reader.Read(b)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return b[:n], err
+}
+
+
+/*
 	read messages based on readLine()
  */
 func (client *Client) readReply() (interface{}, error) {
