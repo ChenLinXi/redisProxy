@@ -42,8 +42,8 @@ func (server *Server) handleConnection(conn net.Conn){
 	redisConn := &redisConn{
 		conn: rc,
 		server: server,
-		br:bufio.NewReaderSize(conn, 1024),
-		bw:bufio.NewWriterSize(conn, 1024),
+		br:bufio.NewReaderSize(rc, 1024),
+		bw:bufio.NewWriterSize(rc, 1024),
 	}
 
 	for {
